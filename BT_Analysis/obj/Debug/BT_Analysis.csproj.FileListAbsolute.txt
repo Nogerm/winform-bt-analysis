@@ -1,0 +1,10 @@
+c:\users\10211014\documents\visual studio 2015\Projects\BT_Analysis\BT_Analysis\bin\Debug\BT_Analysis.exe.config
+C:\Users\10211014\Documents\Visual Studio 2015\Projects\BT_Analysis\BT_Analysis\bin\Debug\BT_Analysis.exe
+C:\Users\10211014\Documents\Visual Studio 2015\Projects\BT_Analysis\BT_Analysis\bin\Debug\BT_Analysis.pdb
+C:\Users\10211014\Documents\Visual Studio 2015\Projects\BT_Analysis\BT_Analysis\bin\Debug\inthehand.net.personal.dll
+C:\Users\10211014\Documents\Visual Studio 2015\Projects\BT_Analysis\BT_Analysis\obj\Debug\BT_Analysis.csprojResolveAssemblyReference.cache
+C:\Users\10211014\Documents\Visual Studio 2015\Projects\BT_Analysis\BT_Analysis\obj\Debug\BT_Analysis.Form1.resources
+C:\Users\10211014\Documents\Visual Studio 2015\Projects\BT_Analysis\BT_Analysis\obj\Debug\BT_Analysis.Properties.Resources.resources
+C:\Users\10211014\Documents\Visual Studio 2015\Projects\BT_Analysis\BT_Analysis\obj\Debug\BT_Analysis.csproj.GenerateResource.Cache
+C:\Users\10211014\Documents\Visual Studio 2015\Projects\BT_Analysis\BT_Analysis\obj\Debug\BT_Analysis.exe
+C:\Users\10211014\Documents\Visual Studio 2015\Projects\BT_Analysis\BT_Analysis\obj\Debug\BT_Analysis.pdb
