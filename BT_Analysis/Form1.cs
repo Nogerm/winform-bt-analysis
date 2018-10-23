@@ -21,8 +21,9 @@ struct Motor_state {
 }
 
 struct Package {
-    public long index;
+    public double index;
     public float pitch;
+    public int   is_boost;
     public Motor_state left_motor;
     public Motor_state right_motor;
 }
@@ -37,9 +38,9 @@ namespace BT_Analysis
         private const int PACKAGE_SPLIT  = 0x2C;
         private const int PACKAGE_END    = 0x0D;
 
-        private const int SAMPLES_PER_CHART = 512;
+        private const int SAMPLES_PER_CHART = 128;
         private const int BUFFER_PER_PACKAGE = 1024;
-        private const int AXIS_X_INTERVAL = 50;
+        private const int AXIS_X_INTERVAL = 5;
 
         private const int PITCH_MAX = 30;
         private const int PITCH_MIN = 0;
@@ -51,6 +52,7 @@ namespace BT_Analysis
         private const int RPM_MIN = -3000;
 
         //Bluetooth connect
+        private BluetoothClient scanClient;
         private BluetoothClient bluetoothClient;
         private BackgroundWorker bg_worker;
         private List<String> items_name = new List<String>();
@@ -66,6 +68,7 @@ namespace BT_Analysis
         private Queue<Package> dataQueue = new Queue<Package>(SAMPLES_PER_CHART);
         private int new_buffer_cnt = 0;
         private long x_axis_cnt = 0;
+        private double zoom_ratio = 0;
 
         public Form1()
         {
@@ -77,6 +80,7 @@ namespace BT_Analysis
             bg_worker = new BackgroundWorker();
             bg_worker.DoWork += new DoWorkEventHandler(bg_DoWork);
             bg_worker.RunWorkerCompleted += new RunWorkerCompletedEventHandler(bg_RunWorkerCompleted);
+            scanClient = new BluetoothClient();
             bg_worker.RunWorkerAsync();
         }
 
@@ -89,11 +93,11 @@ namespace BT_Analysis
             }
             pbSearch.Hide();
             lbl_status.Text = "Scan complete";
+            scanClient = null;
         }
 
         void bg_DoWork(object sender, DoWorkEventArgs e)
         {
-            BluetoothClient scanClient = new BluetoothClient();
             BluetoothDeviceInfo[] devices = scanClient.DiscoverDevices();
             foreach (BluetoothDeviceInfo device in devices)
             {
@@ -206,14 +210,15 @@ namespace BT_Analysis
                                 string[] new_datas = new_data_str.Split(',');
                                 Package new_package = new Package();
 
-                                new_package.index = x_axis_cnt;
+                                new_package.index = x_axis_cnt * zoom_ratio;
                                 new_package.pitch = float.Parse(new_datas[0], System.Globalization.CultureInfo.InvariantCulture);
-                                new_package.left_motor.voltage = float.Parse(new_datas[1], System.Globalization.CultureInfo.InvariantCulture);
-                                new_package.left_motor.current = float.Parse(new_datas[2], System.Globalization.CultureInfo.InvariantCulture);
-                                new_package.left_motor.rpm = int.Parse(new_datas[3], System.Globalization.CultureInfo.InvariantCulture);
-                                new_package.right_motor.voltage = float.Parse(new_datas[4], System.Globalization.CultureInfo.InvariantCulture);
-                                new_package.right_motor.current = float.Parse(new_datas[5], System.Globalization.CultureInfo.InvariantCulture);
-                                new_package.right_motor.rpm = int.Parse(new_datas[6], System.Globalization.CultureInfo.InvariantCulture);
+                                new_package.is_boost = int.Parse(new_datas[1], System.Globalization.CultureInfo.InvariantCulture);
+                                new_package.left_motor.voltage = float.Parse(new_datas[2], System.Globalization.CultureInfo.InvariantCulture);
+                                new_package.left_motor.current = float.Parse(new_datas[3], System.Globalization.CultureInfo.InvariantCulture);
+                                new_package.left_motor.rpm = int.Parse(new_datas[4], System.Globalization.CultureInfo.InvariantCulture);
+                                new_package.right_motor.voltage = float.Parse(new_datas[5], System.Globalization.CultureInfo.InvariantCulture);
+                                new_package.right_motor.current = float.Parse(new_datas[6], System.Globalization.CultureInfo.InvariantCulture);
+                                new_package.right_motor.rpm = int.Parse(new_datas[7], System.Globalization.CultureInfo.InvariantCulture);
 
                                 //Dequeue if too many data
                                 if (x_axis_cnt > SAMPLES_PER_CHART)
@@ -230,40 +235,61 @@ namespace BT_Analysis
 
                                 //Add point to chart
                                 this.chart1.Series[0].Points.Clear();
+                                this.chart1.Series[1].Points.Clear();
                                 this.chart2.Series[0].Points.Clear();
+                                this.chart2.Series[1].Points.Clear();
                                 this.chart3.Series[0].Points.Clear();
+                                this.chart3.Series[1].Points.Clear();
                                 this.chart4.Series[0].Points.Clear();
+                                this.chart4.Series[1].Points.Clear();
                                 this.chart5.Series[0].Points.Clear();
+                                this.chart5.Series[1].Points.Clear();
                                 this.chart6.Series[0].Points.Clear();
+                                this.chart6.Series[1].Points.Clear();
                                 this.chart7.Series[0].Points.Clear();
+                                this.chart7.Series[1].Points.Clear();
                                 for (int idx = 0; idx < dataQueue.Count; idx++)
                                 {
                                     this.chart1.Series[0].Points.AddXY(dataQueue.ElementAt(idx).index, dataQueue.ElementAt(idx).pitch);
+                                    this.chart1.Series[1].Points.AddXY(dataQueue.ElementAt(idx).index, dataQueue.ElementAt(idx).is_boost * (PITCH_MAX - PITCH_MIN));
                                     this.chart2.Series[0].Points.AddXY(dataQueue.ElementAt(idx).index, dataQueue.ElementAt(idx).left_motor.voltage);
+                                    this.chart2.Series[1].Points.AddXY(dataQueue.ElementAt(idx).index, dataQueue.ElementAt(idx).is_boost * (VOLTAGE_MAX - VOLTAGE_MIN));
                                     this.chart3.Series[0].Points.AddXY(dataQueue.ElementAt(idx).index, dataQueue.ElementAt(idx).left_motor.current);
+                                    this.chart3.Series[1].Points.AddXY(dataQueue.ElementAt(idx).index, dataQueue.ElementAt(idx).is_boost * (CURRENT_MAX - CURRENT_MIN));
                                     this.chart4.Series[0].Points.AddXY(dataQueue.ElementAt(idx).index, dataQueue.ElementAt(idx).left_motor.rpm);
+                                    this.chart4.Series[1].Points.AddXY(dataQueue.ElementAt(idx).index, dataQueue.ElementAt(idx).is_boost * (RPM_MAX - RPM_MIN));
                                     this.chart5.Series[0].Points.AddXY(dataQueue.ElementAt(idx).index, dataQueue.ElementAt(idx).right_motor.voltage);
+                                    this.chart5.Series[1].Points.AddXY(dataQueue.ElementAt(idx).index, dataQueue.ElementAt(idx).is_boost * (VOLTAGE_MAX - VOLTAGE_MIN));
                                     this.chart6.Series[0].Points.AddXY(dataQueue.ElementAt(idx).index, dataQueue.ElementAt(idx).right_motor.current);
+                                    this.chart6.Series[1].Points.AddXY(dataQueue.ElementAt(idx).index, dataQueue.ElementAt(idx).is_boost * (CURRENT_MAX - CURRENT_MIN));
                                     this.chart7.Series[0].Points.AddXY(dataQueue.ElementAt(idx).index, dataQueue.ElementAt(idx).right_motor.rpm);
+                                    this.chart7.Series[1].Points.AddXY(dataQueue.ElementAt(idx).index, dataQueue.ElementAt(idx).is_boost * (RPM_MAX - RPM_MIN));
                                 }
 
                                 //move chart x axis
                                 if (x_axis_cnt > SAMPLES_PER_CHART)
                                 {
-                                    this.chart1.ChartAreas[0].AxisX.Minimum = x_axis_cnt - SAMPLES_PER_CHART + 1;
-                                    this.chart1.ChartAreas[0].AxisX.Maximum = x_axis_cnt;
-                                    this.chart2.ChartAreas[0].AxisX.Minimum = x_axis_cnt - SAMPLES_PER_CHART + 1;
-                                    this.chart2.ChartAreas[0].AxisX.Maximum = x_axis_cnt;
-                                    this.chart3.ChartAreas[0].AxisX.Minimum = x_axis_cnt - SAMPLES_PER_CHART + 1;
-                                    this.chart3.ChartAreas[0].AxisX.Maximum = x_axis_cnt;
-                                    this.chart4.ChartAreas[0].AxisX.Minimum = x_axis_cnt - SAMPLES_PER_CHART + 1;
-                                    this.chart4.ChartAreas[0].AxisX.Maximum = x_axis_cnt;
-                                    this.chart5.ChartAreas[0].AxisX.Minimum = x_axis_cnt - SAMPLES_PER_CHART + 1;
-                                    this.chart5.ChartAreas[0].AxisX.Maximum = x_axis_cnt;
-                                    this.chart6.ChartAreas[0].AxisX.Minimum = x_axis_cnt - SAMPLES_PER_CHART + 1;
-                                    this.chart6.ChartAreas[0].AxisX.Maximum = x_axis_cnt;
-                                    this.chart7.ChartAreas[0].AxisX.Minimum = x_axis_cnt - SAMPLES_PER_CHART + 1;
-                                    this.chart7.ChartAreas[0].AxisX.Maximum = x_axis_cnt;
+                                    this.chart1.ChartAreas[0].AxisX.Minimum = (x_axis_cnt - SAMPLES_PER_CHART) * zoom_ratio;
+                                    this.chart1.ChartAreas[0].AxisX.Maximum = x_axis_cnt * zoom_ratio;
+                                    this.chart1.ChartAreas[0].AxisX.IntervalOffset = -this.chart1.ChartAreas[0].AxisX.Minimum % this.chart1.ChartAreas[0].AxisX.Interval;
+                                    this.chart2.ChartAreas[0].AxisX.Minimum = (x_axis_cnt - SAMPLES_PER_CHART) * zoom_ratio;
+                                    this.chart2.ChartAreas[0].AxisX.Maximum = x_axis_cnt * zoom_ratio;
+                                    this.chart2.ChartAreas[0].AxisX.IntervalOffset = -this.chart2.ChartAreas[0].AxisX.Minimum % this.chart2.ChartAreas[0].AxisX.Interval;
+                                    this.chart3.ChartAreas[0].AxisX.Minimum = (x_axis_cnt - SAMPLES_PER_CHART) * zoom_ratio;
+                                    this.chart3.ChartAreas[0].AxisX.Maximum = x_axis_cnt * zoom_ratio;
+                                    this.chart3.ChartAreas[0].AxisX.IntervalOffset = -this.chart3.ChartAreas[0].AxisX.Minimum % this.chart3.ChartAreas[0].AxisX.Interval;
+                                    this.chart4.ChartAreas[0].AxisX.Minimum = (x_axis_cnt - SAMPLES_PER_CHART) * zoom_ratio;
+                                    this.chart4.ChartAreas[0].AxisX.Maximum = x_axis_cnt * zoom_ratio;
+                                    this.chart4.ChartAreas[0].AxisX.IntervalOffset = -this.chart4.ChartAreas[0].AxisX.Minimum % this.chart4.ChartAreas[0].AxisX.Interval;
+                                    this.chart5.ChartAreas[0].AxisX.Minimum = (x_axis_cnt - SAMPLES_PER_CHART) * zoom_ratio;
+                                    this.chart5.ChartAreas[0].AxisX.Maximum = x_axis_cnt * zoom_ratio;
+                                    this.chart5.ChartAreas[0].AxisX.IntervalOffset = -this.chart5.ChartAreas[0].AxisX.Minimum % this.chart5.ChartAreas[0].AxisX.Interval;
+                                    this.chart6.ChartAreas[0].AxisX.Minimum = (x_axis_cnt - SAMPLES_PER_CHART) * zoom_ratio;
+                                    this.chart6.ChartAreas[0].AxisX.Maximum = x_axis_cnt * zoom_ratio;
+                                    this.chart6.ChartAreas[0].AxisX.IntervalOffset = -this.chart6.ChartAreas[0].AxisX.Minimum % this.chart6.ChartAreas[0].AxisX.Interval;
+                                    this.chart7.ChartAreas[0].AxisX.Minimum = (x_axis_cnt - SAMPLES_PER_CHART) * zoom_ratio;
+                                    this.chart7.ChartAreas[0].AxisX.Maximum = x_axis_cnt * zoom_ratio;
+                                    this.chart7.ChartAreas[0].AxisX.IntervalOffset = -this.chart7.ChartAreas[0].AxisX.Minimum % this.chart7.ChartAreas[0].AxisX.Interval;
                                 }
                             }
                             else
@@ -284,6 +310,8 @@ namespace BT_Analysis
 
         private void InitChart()
         {
+            zoom_ratio = (double.Parse(textBoxQuerySpeed.Text) / 1000);
+
             //Define chart area
             this.chart1.ChartAreas.Clear();
             ChartArea chartArea1 = new ChartArea("ChartArea1");
@@ -318,41 +346,62 @@ namespace BT_Analysis
             Series series1 = new Series("Pitch");
             series1.ChartArea = "ChartArea1";
             this.chart1.Series.Add(series1);
+            Series series8 = new Series("Boost");
+            series8.ChartArea = "ChartArea1";
+            this.chart1.Series.Add(series8);
 
             this.chart2.Series.Clear();
             Series series2 = new Series("Voltage_L");
             series2.ChartArea = "ChartArea2";
             this.chart2.Series.Add(series2);
+            Series series9 = new Series("Boost_copy1");
+            series9.ChartArea = "ChartArea2";
+            this.chart2.Series.Add(series9);
 
             this.chart3.Series.Clear();
             Series series3 = new Series("Current_L");
             series3.ChartArea = "ChartArea3";
             this.chart3.Series.Add(series3);
+            Series series10 = new Series("Boost_copy2");
+            series10.ChartArea = "ChartArea3";
+            this.chart3.Series.Add(series10);
 
             this.chart4.Series.Clear();
             Series series4 = new Series("RPM_L");
             series4.ChartArea = "ChartArea4";
             this.chart4.Series.Add(series4);
+            Series series11 = new Series("Boost_copy3");
+            series11.ChartArea = "ChartArea4";
+            this.chart4.Series.Add(series11);
 
             this.chart5.Series.Clear();
             Series series5 = new Series("Voltage_R");
             series5.ChartArea = "ChartArea5";
             this.chart5.Series.Add(series5);
+            Series series12 = new Series("Boost_copy4");
+            series12.ChartArea = "ChartArea5";
+            this.chart5.Series.Add(series12);
 
             this.chart6.Series.Clear();
             Series series6 = new Series("Current_R");
             series6.ChartArea = "ChartArea6";
             this.chart6.Series.Add(series6);
+            Series series13 = new Series("Boost_copy5");
+            series13.ChartArea = "ChartArea6";
+            this.chart6.Series.Add(series13);
 
             this.chart7.Series.Clear();
             Series series7 = new Series("RPM_R");
             series7.ChartArea = "ChartArea7";
             this.chart7.Series.Add(series7);
+            Series series14 = new Series("Boost_copy2");
+            series14.ChartArea = "ChartArea7";
+            this.chart7.Series.Add(series14);
 
             //Set chartArea Apperence
             this.chart1.ChartAreas[0].AxisX.Interval = AXIS_X_INTERVAL;
             this.chart1.ChartAreas[0].AxisX.Minimum = 0;
-            this.chart1.ChartAreas[0].AxisX.Maximum = SAMPLES_PER_CHART;
+            this.chart1.ChartAreas[0].AxisX.Maximum = SAMPLES_PER_CHART * zoom_ratio;
             this.chart1.ChartAreas[0].AxisY.Minimum = PITCH_MIN;
             this.chart1.ChartAreas[0].AxisY.Maximum = PITCH_MAX;
             this.chart1.ChartAreas[0].AxisX.MajorGrid.LineColor = System.Drawing.Color.Silver;
@@ -362,7 +411,7 @@ namespace BT_Analysis
 
             this.chart2.ChartAreas[0].AxisX.Interval = AXIS_X_INTERVAL;
             this.chart2.ChartAreas[0].AxisX.Minimum = 0;
-            this.chart2.ChartAreas[0].AxisX.Maximum = SAMPLES_PER_CHART;
+            this.chart2.ChartAreas[0].AxisX.Maximum = SAMPLES_PER_CHART * zoom_ratio;
             this.chart2.ChartAreas[0].AxisY.Minimum = VOLTAGE_MIN;
             this.chart2.ChartAreas[0].AxisY.Maximum = VOLTAGE_MAX;
             this.chart2.ChartAreas[0].AxisX.MajorGrid.LineColor = System.Drawing.Color.Silver;
@@ -372,7 +421,7 @@ namespace BT_Analysis
 
             this.chart3.ChartAreas[0].AxisX.Interval = AXIS_X_INTERVAL;
             this.chart3.ChartAreas[0].AxisX.Minimum = 0;
-            this.chart3.ChartAreas[0].AxisX.Maximum = SAMPLES_PER_CHART;
+            this.chart3.ChartAreas[0].AxisX.Maximum = SAMPLES_PER_CHART * zoom_ratio;
             this.chart3.ChartAreas[0].AxisY.Minimum = CURRENT_MIN;
             this.chart3.ChartAreas[0].AxisY.Maximum = CURRENT_MAX;
             this.chart3.ChartAreas[0].AxisX.MajorGrid.LineColor = System.Drawing.Color.Silver;
@@ -382,7 +431,7 @@ namespace BT_Analysis
 
             this.chart4.ChartAreas[0].AxisX.Interval = AXIS_X_INTERVAL;
             this.chart4.ChartAreas[0].AxisX.Minimum = 0;
-            this.chart4.ChartAreas[0].AxisX.Maximum = SAMPLES_PER_CHART;
+            this.chart4.ChartAreas[0].AxisX.Maximum = SAMPLES_PER_CHART * zoom_ratio;
             this.chart4.ChartAreas[0].AxisY.Minimum = RPM_MIN;
             this.chart4.ChartAreas[0].AxisY.Maximum = RPM_MAX;
             this.chart4.ChartAreas[0].AxisX.MajorGrid.LineColor = System.Drawing.Color.Silver;
@@ -392,7 +441,7 @@ namespace BT_Analysis
 
             this.chart5.ChartAreas[0].AxisX.Interval = AXIS_X_INTERVAL;
             this.chart5.ChartAreas[0].AxisX.Minimum = 0;
-            this.chart5.ChartAreas[0].AxisX.Maximum = SAMPLES_PER_CHART;
+            this.chart5.ChartAreas[0].AxisX.Maximum = SAMPLES_PER_CHART * zoom_ratio;
             this.chart5.ChartAreas[0].AxisY.Minimum = VOLTAGE_MIN;
             this.chart5.ChartAreas[0].AxisY.Maximum = VOLTAGE_MAX;
             this.chart5.ChartAreas[0].AxisX.MajorGrid.LineColor = System.Drawing.Color.Silver;
@@ -402,7 +451,7 @@ namespace BT_Analysis
 
             this.chart6.ChartAreas[0].AxisX.Interval = AXIS_X_INTERVAL;
             this.chart6.ChartAreas[0].AxisX.Minimum = 0;
-            this.chart6.ChartAreas[0].AxisX.Maximum = SAMPLES_PER_CHART;
+            this.chart6.ChartAreas[0].AxisX.Maximum = SAMPLES_PER_CHART * zoom_ratio;
             this.chart6.ChartAreas[0].AxisY.Minimum = CURRENT_MIN;
             this.chart6.ChartAreas[0].AxisY.Maximum = CURRENT_MAX;
             this.chart6.ChartAreas[0].AxisX.MajorGrid.LineColor = System.Drawing.Color.Silver;
@@ -412,7 +461,7 @@ namespace BT_Analysis
 
             this.chart7.ChartAreas[0].AxisX.Interval = AXIS_X_INTERVAL;
             this.chart7.ChartAreas[0].AxisX.Minimum = 0;
-            this.chart7.ChartAreas[0].AxisX.Maximum = SAMPLES_PER_CHART;
+            this.chart7.ChartAreas[0].AxisX.Maximum = SAMPLES_PER_CHART * zoom_ratio;
             this.chart7.ChartAreas[0].AxisY.Minimum = RPM_MIN;
             this.chart7.ChartAreas[0].AxisY.Maximum = RPM_MAX;
             this.chart7.ChartAreas[0].AxisX.MajorGrid.LineColor = System.Drawing.Color.Silver;
@@ -464,33 +513,61 @@ namespace BT_Analysis
             this.chart7.Titles[0].Font = new System.Drawing.Font("Microsoft Sans Serif", 12F);
 
             //Set Chart Apperence
-            this.chart1.Series[0].Color = Color.Red;
-            this.chart1.Series[0].ChartType = SeriesChartType.Line;
-            this.chart1.Series[0].Points.Clear();
+            series1.ChartType = SeriesChartType.Line;
+            series1.Color = Color.FromArgb(100, Color.Maroon);
+            series1.Points.Clear();
 
-            this.chart2.Series[0].Color = Color.Red;
-            this.chart2.Series[0].ChartType = SeriesChartType.Line;
-            this.chart2.Series[0].Points.Clear();
+            series2.ChartType = SeriesChartType.Line;
+            series2.Color = Color.FromArgb(100, Color.Red);
+            series2.Points.Clear();
 
-            this.chart3.Series[0].Color = Color.Blue;
-            this.chart3.Series[0].ChartType = SeriesChartType.Line;
-            this.chart3.Series[0].Points.Clear();
+            series3.ChartType = SeriesChartType.Line;
+            series3.Color = Color.FromArgb(100, Color.Blue);
+            series3.Points.Clear();
 
-            this.chart4.Series[0].Color = Color.Green;
-            this.chart4.Series[0].ChartType = SeriesChartType.Line;
-            this.chart4.Series[0].Points.Clear();
+            series4.ChartType = SeriesChartType.Line;
+            series4.Color = Color.FromArgb(100, Color.Green);
+            series4.Points.Clear();
 
-            this.chart5.Series[0].Color = Color.Red;
-            this.chart5.Series[0].ChartType = SeriesChartType.Line;
-            this.chart5.Series[0].Points.Clear();
+            series5.ChartType = SeriesChartType.Line;
+            series5.Color = Color.FromArgb(100, Color.Red);
+            series5.Points.Clear();
 
-            this.chart6.Series[0].Color = Color.Blue;
-            this.chart6.Series[0].ChartType = SeriesChartType.Line;
-            this.chart6.Series[0].Points.Clear();
+            series6.ChartType = SeriesChartType.Line;
+            series6.Color = Color.FromArgb(100, Color.Blue);
+            series6.Points.Clear();
 
-            this.chart7.Series[0].Color = Color.Green;
-            this.chart7.Series[0].ChartType = SeriesChartType.Line;
-            this.chart7.Series[0].Points.Clear();
+            series7.ChartType = SeriesChartType.Line;
+            series7.Color = Color.FromArgb(100, Color.Green);
+            series7.Points.Clear();
+
+            series8.ChartType = SeriesChartType.Area;
+            series8.Color = Color.FromArgb(60, Color.DarkOrange);
+            series8.Points.Clear();
+
+            series9.ChartType = SeriesChartType.Area;
+            series9.Color = Color.FromArgb(60, Color.DarkOrange);
+            series9.Points.Clear();
+
+            series10.ChartType = SeriesChartType.Area;
+            series10.Color = Color.FromArgb(60, Color.DarkOrange);
+            series10.Points.Clear();
+
+            series11.ChartType = SeriesChartType.Area;
+            series11.Color = Color.FromArgb(60, Color.DarkOrange);
+            series11.Points.Clear();
+
+            series12.ChartType = SeriesChartType.Area;
+            series12.Color = Color.FromArgb(60, Color.DarkOrange);
+            series12.Points.Clear();
+
+            series13.ChartType = SeriesChartType.Area;
+            series13.Color = Color.FromArgb(60, Color.DarkOrange);
+            series13.Points.Clear();
+
+            series14.ChartType = SeriesChartType.Area;
+            series14.Color = Color.FromArgb(60, Color.DarkOrange);
+            series14.Points.Clear();
         }
     }
 }
