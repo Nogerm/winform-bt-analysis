@@ -22,8 +22,9 @@ struct Motor_state {
 
 struct Package {
     public double index;
-    public float pitch;
-    public int   is_boost;
+    public float  pitch;
+    public int    is_boost;
+    public int    intent;
     public Motor_state left_motor;
     public Motor_state right_motor;
 }
@@ -33,10 +34,10 @@ namespace BT_Analysis
     public partial class Form1 : Form
     {
         //Const
-        private const int PACKAGE_QUERY  = 0xFF;
+        private const int PACKAGE_QUERY = 0xFF;
         private const int PACKAGE_HEADER = 0xFE;
-        private const int PACKAGE_SPLIT  = 0x2C;
-        private const int PACKAGE_END    = 0x0D;
+        private const int PACKAGE_SPLIT = 0x2C;
+        private const int PACKAGE_END = 0x0D;
 
         private const int SAMPLES_PER_CHART = 128;
         private const int BUFFER_PER_PACKAGE = 1024;
@@ -50,6 +51,8 @@ namespace BT_Analysis
         private const int CURRENT_MIN = -1;
         private const int RPM_MAX = 3000;
         private const int RPM_MIN = -3000;
+        private const int INTENT_MAX = 4;
+        private const int INTENT_MIN = -1;
 
         //Bluetooth connect
         private BluetoothClient scanClient;
@@ -69,6 +72,10 @@ namespace BT_Analysis
         private int new_buffer_cnt = 0;
         private long x_axis_cnt = 0;
         private double zoom_ratio = 0;
+
+        //Tooltips
+        Point? prevPosition = null;
+        ToolTip tooltip = new ToolTip();
 
         public Form1()
         {
@@ -107,7 +114,8 @@ namespace BT_Analysis
             e.Result = items_name.ToArray();
         }
 
-        private void receive_data(CancellationToken token) {
+        private void receive_data(CancellationToken token)
+        {
             while (bluetoothClient.Connected)
             {
                 if (token.IsCancellationRequested == true)
@@ -126,7 +134,7 @@ namespace BT_Analysis
                     catch (System.IO.IOException e)
                     {
 
-                    }   
+                    }
                 }
             }
         }
@@ -182,7 +190,8 @@ namespace BT_Analysis
 
         private void tim_query_Tick(object sender, EventArgs e)
         {
-            if (bluetoothClient.Connected) {
+            if (bluetoothClient.Connected)
+            {
                 //Request data
                 stream.WriteByte(PACKAGE_QUERY);
 
@@ -212,7 +221,8 @@ namespace BT_Analysis
 
                                 new_package.index = x_axis_cnt * zoom_ratio;
                                 new_package.pitch = float.Parse(new_datas[0], System.Globalization.CultureInfo.InvariantCulture);
-                                new_package.is_boost = int.Parse(new_datas[1], System.Globalization.CultureInfo.InvariantCulture);
+                                new_package.intent = int.Parse(new_datas[1], System.Globalization.CultureInfo.InvariantCulture);
+                                new_package.is_boost = new_package.intent == 3 ? 1 : 0;
                                 new_package.left_motor.voltage = float.Parse(new_datas[2], System.Globalization.CultureInfo.InvariantCulture);
                                 new_package.left_motor.current = float.Parse(new_datas[3], System.Globalization.CultureInfo.InvariantCulture);
                                 new_package.left_motor.rpm = int.Parse(new_datas[4], System.Globalization.CultureInfo.InvariantCulture);
@@ -248,6 +258,7 @@ namespace BT_Analysis
                                 this.chart6.Series[1].Points.Clear();
                                 this.chart7.Series[0].Points.Clear();
                                 this.chart7.Series[1].Points.Clear();
+                                this.chart8.Series[0].Points.Clear();
                                 for (int idx = 0; idx < dataQueue.Count; idx++)
                                 {
                                     this.chart1.Series[0].Points.AddXY(dataQueue.ElementAt(idx).index, dataQueue.ElementAt(idx).pitch);
@@ -264,6 +275,7 @@ namespace BT_Analysis
                                     this.chart6.Series[1].Points.AddXY(dataQueue.ElementAt(idx).index, dataQueue.ElementAt(idx).is_boost * (CURRENT_MAX - CURRENT_MIN));
                                     this.chart7.Series[0].Points.AddXY(dataQueue.ElementAt(idx).index, dataQueue.ElementAt(idx).right_motor.rpm);
                                     this.chart7.Series[1].Points.AddXY(dataQueue.ElementAt(idx).index, dataQueue.ElementAt(idx).is_boost * (RPM_MAX - RPM_MIN));
+                                    this.chart8.Series[0].Points.AddXY(dataQueue.ElementAt(idx).index, dataQueue.ElementAt(idx).intent);
                                 }
 
                                 //move chart x axis
@@ -290,6 +302,9 @@ namespace BT_Analysis
                                     this.chart7.ChartAreas[0].AxisX.Minimum = (x_axis_cnt - SAMPLES_PER_CHART) * zoom_ratio;
                                     this.chart7.ChartAreas[0].AxisX.Maximum = x_axis_cnt * zoom_ratio;
                                     this.chart7.ChartAreas[0].AxisX.IntervalOffset = -this.chart7.ChartAreas[0].AxisX.Minimum % this.chart7.ChartAreas[0].AxisX.Interval;
+                                    this.chart8.ChartAreas[0].AxisX.Minimum = (x_axis_cnt - SAMPLES_PER_CHART) * zoom_ratio;
+                                    this.chart8.ChartAreas[0].AxisX.Maximum = x_axis_cnt * zoom_ratio;
+                                    this.chart8.ChartAreas[0].AxisX.IntervalOffset = -this.chart8.ChartAreas[0].AxisX.Minimum % this.chart8.ChartAreas[0].AxisX.Interval;
                                 }
                             }
                             else
@@ -340,6 +355,10 @@ namespace BT_Analysis
             this.chart7.ChartAreas.Clear();
             ChartArea chartArea7 = new ChartArea("ChartArea7");
             this.chart7.ChartAreas.Add(chartArea7);
+
+            this.chart8.ChartAreas.Clear();
+            ChartArea chartArea8 = new ChartArea("ChartArea8");
+            this.chart8.ChartAreas.Add(chartArea8);
 
             //Define chart series
             this.chart1.Series.Clear();
@@ -397,6 +416,11 @@ namespace BT_Analysis
             Series series14 = new Series("Boost_copy2");
             series14.ChartArea = "ChartArea7";
             this.chart7.Series.Add(series14);
+
+            this.chart8.Series.Clear();
+            Series series15 = new Series("Intent");
+            series15.ChartArea = "ChartArea8";
+            this.chart8.Series.Add(series15);
 
             //Set chartArea Apperence
             this.chart1.ChartAreas[0].AxisX.Interval = AXIS_X_INTERVAL;
@@ -469,6 +493,21 @@ namespace BT_Analysis
             this.chart7.ChartAreas[0].InnerPlotPosition = new ElementPosition(10, 0, 90, 85);
             this.chart7.Legends.Clear();
 
+            this.chart8.ChartAreas[0].AxisX.Interval = AXIS_X_INTERVAL;
+            this.chart8.ChartAreas[0].AxisX.Minimum = 0;
+            this.chart8.ChartAreas[0].AxisX.Maximum = SAMPLES_PER_CHART * zoom_ratio;
+            this.chart8.ChartAreas[0].AxisY.Minimum = INTENT_MIN;
+            this.chart8.ChartAreas[0].AxisY.Maximum = INTENT_MAX;
+            this.chart8.ChartAreas[0].AxisX.MajorGrid.LineColor = System.Drawing.Color.Silver;
+            this.chart8.ChartAreas[0].AxisY.MajorGrid.LineColor = System.Drawing.Color.Silver;
+            this.chart8.ChartAreas[0].InnerPlotPosition = new ElementPosition(20, 0, 80, 85);
+            this.chart8.ChartAreas[0].AxisY.CustomLabels.Add(-0.5, 0.5, "STOP");
+            this.chart8.ChartAreas[0].AxisY.CustomLabels.Add(0.5, 1.5, "Forward");
+            this.chart8.ChartAreas[0].AxisY.CustomLabels.Add(1.5, 2.5, "Backward");
+            this.chart8.ChartAreas[0].AxisY.CustomLabels.Add(2.5, 3.5, "Boost");
+            this.chart8.ChartAreas[0].AxisY.CustomLabels.Add(3.5, 4.5, "TURN");
+            this.chart8.Legends.Clear();
+
             //Set chart title
             this.chart1.Titles.Clear();
             this.chart1.Titles.Add("Title01");
@@ -489,55 +528,68 @@ namespace BT_Analysis
             this.chart3.Titles[0].Font = new System.Drawing.Font("Microsoft Sans Serif", 12F);
 
             this.chart4.Titles.Clear();
-            this.chart4.Titles.Add("Title03");
+            this.chart4.Titles.Add("Title04");
             this.chart4.Titles[0].Text = "Motor Left RPM";
             this.chart4.Titles[0].ForeColor = Color.RoyalBlue;
             this.chart4.Titles[0].Font = new System.Drawing.Font("Microsoft Sans Serif", 12F);
 
             this.chart5.Titles.Clear();
-            this.chart5.Titles.Add("Title02");
+            this.chart5.Titles.Add("Title05");
             this.chart5.Titles[0].Text = "Motor Right Voltage";
             this.chart5.Titles[0].ForeColor = Color.RoyalBlue;
             this.chart5.Titles[0].Font = new System.Drawing.Font("Microsoft Sans Serif", 12F);
 
             this.chart6.Titles.Clear();
-            this.chart6.Titles.Add("Title03");
+            this.chart6.Titles.Add("Title06");
             this.chart6.Titles[0].Text = "Motor Right Current";
             this.chart6.Titles[0].ForeColor = Color.RoyalBlue;
             this.chart6.Titles[0].Font = new System.Drawing.Font("Microsoft Sans Serif", 12F);
 
             this.chart7.Titles.Clear();
-            this.chart7.Titles.Add("Title03");
+            this.chart7.Titles.Add("Title07");
             this.chart7.Titles[0].Text = "Motor Right RPM";
             this.chart7.Titles[0].ForeColor = Color.RoyalBlue;
             this.chart7.Titles[0].Font = new System.Drawing.Font("Microsoft Sans Serif", 12F);
 
+            this.chart8.Titles.Clear();
+            this.chart8.Titles.Add("Title08");
+            this.chart8.Titles[0].Text = "Intent";
+            this.chart8.Titles[0].ForeColor = Color.RoyalBlue;
+            this.chart8.Titles[0].Font = new System.Drawing.Font("Microsoft Sans Serif", 12F);
+
             //Set Chart Apperence
             series1.ChartType = SeriesChartType.Line;
+            series1.BorderWidth = 2;
             series1.Color = Color.FromArgb(100, Color.Maroon);
             series1.Points.Clear();
 
             series2.ChartType = SeriesChartType.Line;
+            series2.BorderWidth = 2;
             series2.Color = Color.FromArgb(100, Color.Red);
             series2.Points.Clear();
 
             series3.ChartType = SeriesChartType.Line;
+            series3.BorderWidth = 2;
             series3.Color = Color.FromArgb(100, Color.Blue);
             series3.Points.Clear();
 
             series4.ChartType = SeriesChartType.Line;
+            series4.BorderWidth = 2;
             series4.Color = Color.FromArgb(100, Color.Green);
             series4.Points.Clear();
 
             series5.ChartType = SeriesChartType.Line;
+            series5.BorderWidth = 2;
             series5.Color = Color.FromArgb(100, Color.Red);
             series5.Points.Clear();
 
             series6.ChartType = SeriesChartType.Line;
+            series6.BorderWidth = 2;
             series6.Color = Color.FromArgb(100, Color.Blue);
             series6.Points.Clear();
 
             series7.ChartType = SeriesChartType.Line;
+            series7.BorderWidth = 2;
             series7.Color = Color.FromArgb(100, Color.Green);
             series7.Points.Clear();
 
@@ -568,6 +620,252 @@ namespace BT_Analysis
             series14.ChartType = SeriesChartType.Area;
             series14.Color = Color.FromArgb(60, Color.DarkOrange);
             series14.Points.Clear();
+
+            series15.ChartType = SeriesChartType.Line;
+            series15.BorderWidth = 2;
+            series15.Color = Color.FromArgb(60, Color.Red);
+            series15.Points.Clear();
+        }
+
+        //show tooltip when mouse close to data
+        private void chart1_MouseMove(object sender, MouseEventArgs e)
+        {
+            var pos = e.Location;
+            if (prevPosition.HasValue && pos == prevPosition.Value)
+                return;
+            tooltip.RemoveAll();
+            prevPosition = pos;
+            var results = chart1.HitTest(pos.X, pos.Y, false,
+                                            ChartElementType.DataPoint);
+            foreach (var result in results)
+            {
+                if (result.ChartElementType == ChartElementType.DataPoint)
+                {
+                    var prop = result.Object as DataPoint;
+                    if (prop != null)
+                    {
+                        var pointXPixel = result.ChartArea.AxisX.ValueToPixelPosition(prop.XValue);
+                        var pointYPixel = result.ChartArea.AxisY.ValueToPixelPosition(prop.YValues[0]);
+
+                        // check if the cursor is really close to the point (2 pixels around the point)
+                        if (Math.Abs(pos.X - pointXPixel) < 2 &&
+                            Math.Abs(pos.Y - pointYPixel) < 2)
+                        {
+                            tooltip.Show("X=" + prop.XValue + ", Y=" + prop.YValues[0], this.chart1,
+                                            pos.X, pos.Y - 15);
+                        }
+                    }
+                }
+            }
+        }
+
+        private void chart2_MouseMove(object sender, MouseEventArgs e)
+        {
+            var pos = e.Location;
+            if (prevPosition.HasValue && pos == prevPosition.Value)
+                return;
+            tooltip.RemoveAll();
+            prevPosition = pos;
+            var results = chart2.HitTest(pos.X, pos.Y, false,
+                                            ChartElementType.DataPoint);
+            foreach (var result in results)
+            {
+                if (result.ChartElementType == ChartElementType.DataPoint)
+                {
+                    var prop = result.Object as DataPoint;
+                    if (prop != null)
+                    {
+                        var pointXPixel = result.ChartArea.AxisX.ValueToPixelPosition(prop.XValue);
+                        var pointYPixel = result.ChartArea.AxisY.ValueToPixelPosition(prop.YValues[0]);
+
+                        // check if the cursor is really close to the point (2 pixels around the point)
+                        if (Math.Abs(pos.X - pointXPixel) < 2 &&
+                            Math.Abs(pos.Y - pointYPixel) < 2)
+                        {
+                            tooltip.Show("X=" + prop.XValue + ", Y=" + prop.YValues[0], this.chart2,
+                                            pos.X, pos.Y - 15);
+                        }
+                    }
+                }
+            }
+        }
+
+        private void chart3_MouseMove(object sender, MouseEventArgs e)
+        {
+            var pos = e.Location;
+            if (prevPosition.HasValue && pos == prevPosition.Value)
+                return;
+            tooltip.RemoveAll();
+            prevPosition = pos;
+            var results = chart3.HitTest(pos.X, pos.Y, false,
+                                            ChartElementType.DataPoint);
+            foreach (var result in results)
+            {
+                if (result.ChartElementType == ChartElementType.DataPoint)
+                {
+                    var prop = result.Object as DataPoint;
+                    if (prop != null)
+                    {
+                        var pointXPixel = result.ChartArea.AxisX.ValueToPixelPosition(prop.XValue);
+                        var pointYPixel = result.ChartArea.AxisY.ValueToPixelPosition(prop.YValues[0]);
+
+                        // check if the cursor is really close to the point (2 pixels around the point)
+                        if (Math.Abs(pos.X - pointXPixel) < 2 &&
+                            Math.Abs(pos.Y - pointYPixel) < 2)
+                        {
+                            tooltip.Show("X=" + prop.XValue + ", Y=" + prop.YValues[0], this.chart3,
+                                            pos.X, pos.Y - 15);
+                        }
+                    }
+                }
+            }
+        }
+
+        private void chart4_MouseMove(object sender, MouseEventArgs e)
+        {
+            var pos = e.Location;
+            if (prevPosition.HasValue && pos == prevPosition.Value)
+                return;
+            tooltip.RemoveAll();
+            prevPosition = pos;
+            var results = chart4.HitTest(pos.X, pos.Y, false,
+                                            ChartElementType.DataPoint);
+            foreach (var result in results)
+            {
+                if (result.ChartElementType == ChartElementType.DataPoint)
+                {
+                    var prop = result.Object as DataPoint;
+                    if (prop != null)
+                    {
+                        var pointXPixel = result.ChartArea.AxisX.ValueToPixelPosition(prop.XValue);
+                        var pointYPixel = result.ChartArea.AxisY.ValueToPixelPosition(prop.YValues[0]);
+
+                        // check if the cursor is really close to the point (2 pixels around the point)
+                        if (Math.Abs(pos.X - pointXPixel) < 2 &&
+                            Math.Abs(pos.Y - pointYPixel) < 2)
+                        {
+                            tooltip.Show("X=" + prop.XValue + ", Y=" + prop.YValues[0], this.chart4,
+                                            pos.X, pos.Y - 15);
+                        }
+                    }
+                }
+            }
+        }
+
+        private void chart5_MouseMove(object sender, MouseEventArgs e)
+        {
+            var pos = e.Location;
+            if (prevPosition.HasValue && pos == prevPosition.Value)
+                return;
+            tooltip.RemoveAll();
+            prevPosition = pos;
+            var results = chart5.HitTest(pos.X, pos.Y, false,
+                                            ChartElementType.DataPoint);
+            foreach (var result in results)
+            {
+                if (result.ChartElementType == ChartElementType.DataPoint)
+                {
+                    var prop = result.Object as DataPoint;
+                    if (prop != null)
+                    {
+                        var pointXPixel = result.ChartArea.AxisX.ValueToPixelPosition(prop.XValue);
+                        var pointYPixel = result.ChartArea.AxisY.ValueToPixelPosition(prop.YValues[0]);
+
+                        // check if the cursor is really close to the point (2 pixels around the point)
+                        if (Math.Abs(pos.X - pointXPixel) < 2 &&
+                            Math.Abs(pos.Y - pointYPixel) < 2)
+                        {
+                            tooltip.Show("X=" + prop.XValue + ", Y=" + prop.YValues[0], this.chart5,
+                                            pos.X, pos.Y - 15);
+                        }
+                    }
+                }
+            }
+        }
+
+        private void chart6_MouseMove(object sender, MouseEventArgs e)
+        {
+            var pos = e.Location;
+            if (prevPosition.HasValue && pos == prevPosition.Value)
+                return;
+            tooltip.RemoveAll();
+            prevPosition = pos;
+            var results = chart6.HitTest(pos.X, pos.Y, false,
+                                            ChartElementType.DataPoint);
+            foreach (var result in results)
+            {
+                if (result.ChartElementType == ChartElementType.DataPoint)
+                {
+                    var prop = result.Object as DataPoint;
+                    if (prop != null)
+                    {
+                        var pointXPixel = result.ChartArea.AxisX.ValueToPixelPosition(prop.XValue);
+                        var pointYPixel = result.ChartArea.AxisY.ValueToPixelPosition(prop.YValues[0]);
+
+                        // check if the cursor is really close to the point (2 pixels around the point)
+                        if (Math.Abs(pos.X - pointXPixel) < 2 &&
+                            Math.Abs(pos.Y - pointYPixel) < 2)
+                        {
+                            tooltip.Show("X=" + prop.XValue + ", Y=" + prop.YValues[0], this.chart6,
+                                            pos.X, pos.Y - 15);
+                        }
+                    }
+                }
+            }
+        }
+
+        private void chart7_MouseMove(object sender, MouseEventArgs e)
+        {
+            var pos = e.Location;
+            if (prevPosition.HasValue && pos == prevPosition.Value)
+                return;
+            tooltip.RemoveAll();
+            prevPosition = pos;
+            var results = chart7.HitTest(pos.X, pos.Y, false,
+                                            ChartElementType.DataPoint);
+            foreach (var result in results)
+            {
+                if (result.ChartElementType == ChartElementType.DataPoint)
+                {
+                    var prop = result.Object as DataPoint;
+                    if (prop != null)
+                    {
+                        var pointXPixel = result.ChartArea.AxisX.ValueToPixelPosition(prop.XValue);
+                        var pointYPixel = result.ChartArea.AxisY.ValueToPixelPosition(prop.YValues[0]);
+
+                        // check if the cursor is really close to the point (2 pixels around the point)
+                        if (Math.Abs(pos.X - pointXPixel) < 2 &&
+                            Math.Abs(pos.Y - pointYPixel) < 2)
+                        {
+                            tooltip.Show("X=" + prop.XValue + ", Y=" + prop.YValues[0], this.chart7,
+                                            pos.X, pos.Y - 15);
+                        }
+                    }
+                }
+            }
+        }
+
+        private void btn_reset_Click(object sender, EventArgs e)
+        {
+            this.chart1.Series[0].Points.Clear();
+            this.chart1.Series[1].Points.Clear();
+            this.chart2.Series[0].Points.Clear();
+            this.chart2.Series[1].Points.Clear();
+            this.chart3.Series[0].Points.Clear();
+            this.chart3.Series[1].Points.Clear();
+            this.chart4.Series[0].Points.Clear();
+            this.chart4.Series[1].Points.Clear();
+            this.chart5.Series[0].Points.Clear();
+            this.chart5.Series[1].Points.Clear();
+            this.chart6.Series[0].Points.Clear();
+            this.chart6.Series[1].Points.Clear();
+            this.chart7.Series[0].Points.Clear();
+            this.chart7.Series[1].Points.Clear();
+            this.chart8.Series[0].Points.Clear();
+
+            this.dataQueue.Clear();
+
+            x_axis_cnt = 0;
         }
     }
 }
